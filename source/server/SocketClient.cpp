@@ -80,7 +80,7 @@ bool SocketClient::SEND(Packet *packet) {
 
     //Logger::log("Sending Packet Size: %d Sending Type: %s\n", packet->mPacketSize, packetNames[packet->mType]);
 
-    if ((valread = nn::socket::Send(this->socket_log_socket, buffer, packet->mPacketSize + sizeof(Packet), this->sock_flags) > 0)) {
+    if ((valread = nn::socket::Send(this->socket_log_socket, buffer, packet->mPacketSize + sizeof(Packet), 0) > 0)) {
         return true;
     } else {
         Logger::log("Failed to Fully Send Packet! Result: %d Type: %s Packet Size: %d\n", valread, packetNames[packet->mType], packet->mPacketSize);
@@ -110,9 +110,18 @@ bool SocketClient::RECV() {
             valread += result;
         } else {
             Logger::log("Header Read Failed! Value: %d Total Read: %d\n", result, valread);
-        this->socket_errno = nn::socket::GetLastErrno();
-            this->closeSocket();
-            return false;
+            this->socket_errno = nn::socket::GetLastErrno();
+
+            //int result = nn::socket::Recv(this->socket_log_socket, headerBuf + valread, headerSize - valread, this->socket_errno); 
+            //this->closeSocket();
+            //return false;
+
+            if (this->socket_errno==35||this->socket_errno==107){
+                return true;
+            } else {
+                this->closeSocket();
+                return false; 
+            }
         }
     }
 

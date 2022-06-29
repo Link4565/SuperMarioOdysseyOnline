@@ -219,29 +219,34 @@ bool Client::startConnection() {
 
     if (result) {
         // wait for client init packet
-        while (true) {
-
+        bool waitForClientInitPacket = true;
+        while (waitForClientInitPacket) {
             if (mSocket->RECV()) {
+                if(!mSocket->mPacketQueue.isEmpty()){
+                    Packet* curPacket = mSocket->mPacketQueue.popFront();
 
-                Packet* curPacket = mSocket->mPacketQueue.popFront();
+                    if (curPacket->mType == PacketType::CLIENTINIT) {
+                        InitPacket* initPacket = (InitPacket*)curPacket;
 
-                if (curPacket->mType == PacketType::CLIENTINIT) {
-                    InitPacket* initPacket = (InitPacket*)curPacket;
+                        Logger::log("Server Max Player Size: %d\n", initPacket->maxPlayers);
 
-                    Logger::log("Server Max Player Size: %d\n", initPacket->maxPlayers);
+                        maxPuppets = initPacket->maxPlayers - 1;
 
-                    maxPuppets = initPacket->maxPlayers - 1;
+                        clientConnected = true;
 
-                }else {
-                    Logger::log("First Packet was not Init!\n");
-                    result = false;
+                        waitForClientInitPacket = false;
+
+                    } else {
+                        if (curPacket->mType != PacketType::UNKNOWN) {
+                            Logger::log("First Packet was not Init!\n");
+                            clientConnected = false;
+                            waitForClientInitPacket = false;
+                        }
+                    }
+
+                    free(curPacket);
                 }
-
-                free(curPacket);
-
             }
-
-            break;
         }
     }
     
