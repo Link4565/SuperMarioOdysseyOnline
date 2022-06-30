@@ -232,14 +232,12 @@ bool Client::startConnection() {
 
                         maxPuppets = initPacket->maxPlayers - 1;
 
-                        clientConnected = true;
-
                         waitForClientInitPacket = false;
 
                     } else {
                         if (curPacket->mType != PacketType::UNKNOWN) {
                             Logger::log("First Packet was not Init!\n");
-                            clientConnected = false;
+                            result = false;
                             waitForClientInitPacket = false;
                         }
                     }

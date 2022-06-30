@@ -30,6 +30,7 @@ Result Close(s32 socket);
 
 s32 Send(s32 socket, const void* data, ulong dataLen, s32 flags);
 s32 Recv(s32 socket, void* out, ulong outLen, s32 flags);
+s32 RecvFrom(s32 socket, void* out, ulong outLen, s32 flags, sockaddr* out_address, u32* out_addr_len);
 
 u16 InetHtons(u16 val);
 s32 InetAton(const char* addressStr, in_addr* addressOut);

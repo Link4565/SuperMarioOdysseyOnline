@@ -116,7 +116,7 @@ bool SocketClient::RECV() {
             //this->closeSocket();
             //return false;
 
-            if (this->socket_errno==35||this->socket_errno==107){
+            if (this->socket_errno==11){
                 return true;
             } else {
                 this->closeSocket();
