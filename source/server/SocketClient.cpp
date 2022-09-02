@@ -34,7 +34,14 @@ nn::Result SocketClient::init(const char* ip, u16 port) {
     }
     #endif
 
-    if ((this->socket_log_socket = nn::socket::Socket(2, 1, 6)) < 0) {
+    if ((this->socket_log_socket_tcp = nn::socket::Socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        Logger::log("Socket Unavailable.\n");
+        this->socket_errno = nn::socket::GetLastErrno();
+        this->socket_log_state = SOCKET_LOG_UNAVAILABLE;
+        return -1;
+    }
+
+    if ((this->socket_log_socket_udp = nn::socket::Socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         Logger::log("Socket Unavailable.\n");
         this->socket_errno = nn::socket::GetLastErrno();
         this->socket_log_state = SOCKET_LOG_UNAVAILABLE;
@@ -54,11 +61,18 @@ nn::Result SocketClient::init(const char* ip, u16 port) {
 
     int sockOptValue = true;
 
-    nn::socket::SetSockOpt(this->socket_log_socket, 6, TCP_NODELAY, &sockOptValue, sizeof(sockOptValue));
+    nn::socket::SetSockOpt(this->socket_log_socket_tcp, 6, TCP_NODELAY, &sockOptValue, sizeof(sockOptValue));
 
     nn::Result result;
     
-    if((result = nn::socket::Connect(this->socket_log_socket, &serverAddress, sizeof(serverAddress))).isFailure()) {
+    if((result = nn::socket::Connect(this->socket_log_socket_tcp, &serverAddress, sizeof(serverAddress))).isFailure()) {
+        Logger::log("Socket Connection Failed!\n");
+        this->socket_errno = nn::socket::GetLastErrno();
+        this->socket_log_state = SOCKET_LOG_UNAVAILABLE;
+        return result;
+    }
+
+    if((result = nn::socket::Connect(this->socket_log_socket_udp, &serverAddress, sizeof(serverAddress))).isFailure()) {
         Logger::log("Socket Connection Failed!\n");
         this->socket_errno = nn::socket::GetLastErrno();
         this->socket_log_state = SOCKET_LOG_UNAVAILABLE;
@@ -67,13 +81,20 @@ nn::Result SocketClient::init(const char* ip, u16 port) {
 
     this->socket_log_state = SOCKET_LOG_CONNECTED;
 
-    Logger::log("Socket fd: %d\n", socket_log_socket);
+    Logger::log("TCP Socket fd: %d\n", socket_log_socket_tcp);
+    Logger::log("UDP Socket fd: %d\n", socket_log_socket_udp);
 
     return result;
 
 }
 
 bool SocketClient::SEND(Packet *packet) {
+
+    bool useUdp = false;
+    return SEND(packet, &useUdp);
+}
+
+bool SocketClient::SEND(Packet *packet, bool *useUdp) {
 
     if (this->socket_log_state != SOCKET_LOG_CONNECTED)
         return false;
@@ -82,10 +103,15 @@ bool SocketClient::SEND(Packet *packet) {
 
     int valread = 0;
 
+    s32 socket = this->socket_log_socket_tcp;
+
     if (packet->mType != PLAYERINF && packet->mType != HACKCAPINF)
         Logger::log("Sending packet: %s\n", packetNames[packet->mType]);
 
-    if ((valread = nn::socket::Send(this->socket_log_socket, buffer, packet->mPacketSize + sizeof(Packet), 0) > 0)) {
+    if (useUdp){
+        socket = this->socket_log_socket_udp;
+    }
+    if ((valread = nn::socket::Send(socket, buffer, packet->mPacketSize + sizeof(Packet), 0) > 0)) {
         return true;
     } else {
         Logger::log("Failed to Fully Send Packet! Result: %d Type: %s Packet Size: %d\n", valread, packetNames[packet->mType], packet->mPacketSize);
@@ -98,6 +124,14 @@ bool SocketClient::SEND(Packet *packet) {
 
 bool SocketClient::RECV() {
 
+    bool resultTcp=RECV_TCP();
+    bool resultUdp=RECV_UDP();
+
+    return resultTcp && resultUdp;
+
+}
+
+bool SocketClient::RECV_TCP() {
     if (this->socket_log_state != SOCKET_LOG_CONNECTED) {
         Logger::log("Unable To Receive! Socket Not Connected.\n");
         this->socket_errno = nn::socket::GetLastErrno();
@@ -110,7 +144,7 @@ bool SocketClient::RECV() {
 
     // read only the size of a header
     while(valread < headerSize) {
-        int result = nn::socket::Recv(this->socket_log_socket, headerBuf + valread,
+        int result = nn::socket::Recv(this->socket_log_socket_tcp, headerBuf + valread,
                                       headerSize - valread, this->sock_flags);
 
         this->socket_errno = nn::socket::GetLastErrno();
@@ -156,7 +190,102 @@ bool SocketClient::RECV() {
 
                 while (valread < fullSize) {
 
-                    int result = nn::socket::Recv(this->socket_log_socket, packetBuf + valread,
+                    int result = nn::socket::Recv(this->socket_log_socket_tcp, packetBuf + valread,
+                                                  fullSize - valread, this->sock_flags);
+
+                    this->socket_errno = nn::socket::GetLastErrno();
+
+                    if (result > 0) {
+                        valread += result;
+                    } else {
+                        free(packetBuf);
+                        Logger::log("Packet Read Failed! Value: %d\nPacket Size: %d\nPacket Type: %s\n", result, header->mPacketSize, packetNames[header->mType]);
+                        this->closeSocket();
+                        return false;
+                    }
+                }
+
+                Packet *packet = reinterpret_cast<Packet*>(packetBuf);
+
+                if(mPacketQueue.size() < maxBufSize - 1) {
+                    mPacketQueue.pushBack(packet);
+                } else {
+                    free(packetBuf);
+                }
+            }
+        } else {
+            Logger::log("Failed to aquire valid data! Packet Type: %d Full Packet Size %d valread size: %d", header->mType, fullSize, valread);
+        }
+        
+        return true;
+    } else {  // if we error'd, close the socket
+        Logger::log("valread was zero! Disconnecting.\n");
+        this->socket_errno = nn::socket::GetLastErrno();
+        this->closeSocket();
+        return false;
+    }
+}
+
+bool SocketClient::RECV_UDP() {
+    if (this->socket_log_state != SOCKET_LOG_CONNECTED) {
+        Logger::log("Unable To Receive! Socket Not Connected.\n");
+        this->socket_errno = nn::socket::GetLastErrno();
+        return false;
+    }
+    
+    int headerSize = sizeof(Packet);
+    char headerBuf[sizeof(Packet)] = {};
+    int valread = 0;
+
+    // read only the size of a header
+    while(valread < headerSize) {
+        int result = nn::socket::Recv(this->socket_log_socket_udp, headerBuf + valread,
+                                      headerSize - valread, this->sock_flags);
+
+        this->socket_errno = nn::socket::GetLastErrno();
+        
+        if(result > 0) {
+            valread += result;
+        } else {
+            if(this->socket_errno==11){
+                return true;
+            } else {
+                Logger::log("Header Read Failed! Value: %d Total Read: %d\n", result, valread);
+                this->closeSocket();
+                return false;
+            }
+        }
+    }
+
+    if(valread > 0) {
+        Packet* header = reinterpret_cast<Packet*>(headerBuf);
+
+        int fullSize = header->mPacketSize + sizeof(Packet);
+
+        if (header->mType > PacketType::UNKNOWN && header->mType < PacketType::End &&
+            fullSize <= MAXPACKSIZE && fullSize > 0 && valread == sizeof(Packet)) {
+
+            if (header->mType != PLAYERINF && header->mType != HACKCAPINF) {
+                Logger::log("Received packet (from %02X%02X):", header->mUserID.data[0],
+                            header->mUserID.data[1]);
+                Logger::disableName();
+                Logger::log(" Size: %d", header->mPacketSize);
+                Logger::log(" Type: %d", header->mType);
+                if(packetNames[header->mType])
+                    Logger::log(" Type String: %s\n", packetNames[header->mType]);
+                Logger::enableName();
+            }
+                
+
+            char* packetBuf = (char*)malloc(fullSize);
+
+            if (packetBuf) {
+                
+                memcpy(packetBuf, headerBuf, sizeof(Packet));
+
+                while (valread < fullSize) {
+
+                    int result = nn::socket::Recv(this->socket_log_socket_udp, packetBuf + valread,
                                                   fullSize - valread, this->sock_flags);
 
                     this->socket_errno = nn::socket::GetLastErrno();

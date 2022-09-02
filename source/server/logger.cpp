@@ -43,7 +43,7 @@ nn::Result Logger::init(const char* ip, u16 port) {
 
     #endif
 
-    if ((this->socket_log_socket = nn::socket::Socket(2, 1, 0)) < 0) {
+    if ((this->socket_log_socket_tcp = nn::socket::Socket(2, 1, 0)) < 0) {
         this->socket_log_state = SOCKET_LOG_UNAVAILABLE;
         return -1;
     }
@@ -57,7 +57,7 @@ nn::Result Logger::init(const char* ip, u16 port) {
     nn::Result result;
     bool connected = false;
     for (u32 i = 0; i < ADDITIONAL_LOG_PORT_COUNT + 1; ++i) {
-        result = nn::socket::Connect(this->socket_log_socket, &serverAddress, sizeof(serverAddress));
+        result = nn::socket::Connect(this->socket_log_socket_tcp, &serverAddress, sizeof(serverAddress));
         if (result.isSuccess()) {
             connected = true;
             break;

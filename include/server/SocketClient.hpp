@@ -25,7 +25,10 @@ class SocketClient : public SocketBase {
         nn::Result init(const char* ip, u16 port) override;
         bool closeSocket() override;
         bool SEND(Packet *packet);
+        bool SEND(Packet *packet, bool *useUdp);
         bool RECV();
+        bool RECV_TCP();
+        bool RECV_UDP();
         void printPacket(Packet* packet);
         bool isConnected() {return socket_log_state == SOCKET_LOG_CONNECTED; }
 

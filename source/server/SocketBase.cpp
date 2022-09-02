@@ -40,7 +40,7 @@ s32 SocketBase::socket_log(const char* str)
     if (this->socket_log_state != SOCKET_LOG_CONNECTED)
         return -1;
 
-    return nn::socket::Send(this->socket_log_socket, str, strlen(str), 0);
+    return nn::socket::Send(this->socket_log_socket_tcp, str, strlen(str), 0);
 }
 
 s32 SocketBase::socket_read_char(char *out) {
@@ -50,7 +50,7 @@ s32 SocketBase::socket_read_char(char *out) {
 
     char buf[0x1000];
 
-    int valread = nn::socket::Recv(this->socket_log_socket, buf, sizeof(buf), this->sock_flags);
+    int valread = nn::socket::Recv(this->socket_log_socket_tcp, buf, sizeof(buf), this->sock_flags);
 
     if(valread > 0) {
         buf[valread] = '\0';
@@ -61,7 +61,7 @@ s32 SocketBase::socket_read_char(char *out) {
 
 s32 SocketBase::getFd() {
     if(this->socket_log_state == SOCKET_LOG_CONNECTED) {
-        return this->socket_log_socket;
+        return this->socket_log_socket_tcp;
     }else {
         return -1;
     }
@@ -71,7 +71,8 @@ bool SocketBase::closeSocket() {
 
     this->socket_log_state = SOCKET_LOG_DISCONNECTED; // probably not safe to assume socket will be closed
 
-    nn::Result result = nn::socket::Close(this->socket_log_socket);
+    nn::Result result = nn::socket::Close(this->socket_log_socket_tcp);
+    nn::Result result_2 = nn::socket::Close(this->socket_log_socket_udp);
 
     return result.isSuccess();
 }

@@ -232,6 +232,8 @@ class Client {
         bool waitForGameInit = true;
         bool isFirstConnect = true;
 
+        bool useUdp = false;
+
         // --- Game Layouts ---
 
         al::WindowConfirmWait* mConnectionWait;

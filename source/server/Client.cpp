@@ -31,6 +31,7 @@
 #include "packets/PlayerConnect.h"
 #include "packets/PlayerDC.h"
 #include "packets/TagInf.h"
+#include "packets/UseUdp.h"
 #include "puppets/PuppetInfo.h"
 #include "sead/basis/seadRawPrint.h"
 #include "sead/math/seadQuat.h"
@@ -369,6 +370,8 @@ void Client::readFunc() {
         initPacket.conType = ConnectionTypes::RECONNECT;
     }
 
+    useUdp = false;
+
     mSocket->SEND(&initPacket);  // send initial packet
     
     nn::os::SleepThread(nn::TimeSpan::FromNanoSeconds(500000000)); // sleep for 0.5 seconds to let connection layout fully show (probably should find a better way to do this)
@@ -474,6 +477,10 @@ void Client::readFunc() {
                     maxPuppets = initPacket->maxPlayers - 1;
                     break;
                 }
+                case PacketType::USEUDP: {
+                    useUdp = ((UseUdp*)curPacket)->useUdp;
+                    break;
+                }
                 default:
                     break;
                 }
@@ -570,7 +577,7 @@ void Client::sendPlayerInfPacket(const PlayerActorBase *playerBase, bool isYukim
     }
 
     if(sInstance->lastPlayerInfPacket != packet) {
-        sInstance->mSocket->SEND(&packet);
+        sInstance->mSocket->SEND(&packet, &sInstance->useUdp);
     }
 
     sInstance->lastPlayerInfPacket = packet;
@@ -605,7 +612,7 @@ void Client::sendHackCapInfPacket(const HackCap* hackCap) {
 
         strcpy(packet.capAnim, al::getActionName(hackCap));
 
-        sInstance->mSocket->SEND(&packet);
+        sInstance->mSocket->SEND(&packet, &sInstance->useUdp);
 
         sInstance->isSentHackInf = true;
 

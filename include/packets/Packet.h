@@ -26,6 +26,7 @@ enum PacketType : short {
     CAPTUREINF,
     CHANGESTAGE,
     CMD,
+    USEUDP,
     End // end of enum for bounds checking
 };
 
@@ -43,7 +44,8 @@ USED static const char *packetNames[] = {
     "Moon Collection",
     "Capture Info",
     "Change Stage",
-    "Server Command"
+    "Server Command",
+    "Use UDP"
 };
 
 enum SenderType {
@@ -79,6 +81,7 @@ struct PACKED Packet {
 #include "packets/TagInf.h"
 #include "packets/CostumeInf.h"
 #include "packets/ServerCommand.h"
+#include "packets/UseUdp.h"
 #include "packets/ShineCollect.h"
 #include "packets/CaptureInf.h"
 #include "packets/HackCapInf.h"

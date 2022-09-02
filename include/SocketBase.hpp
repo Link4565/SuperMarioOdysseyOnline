@@ -33,7 +33,8 @@ class SocketBase {
 
         u16 port;
         u8 socket_log_state = SOCKET_LOG_UNINITIALIZED;
-        s32 socket_log_socket;
+        s32 socket_log_socket_tcp;
+        s32 socket_log_socket_udp;
 
         int sock_flags;
 };
